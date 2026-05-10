@@ -1,6 +1,7 @@
 import { ZodSchema } from "zod";
 import { generateId } from "../utils/id-generator.js";
 import { logCall, calculateCost } from "./cost-tracker.js";
+import { globalRateLimiter } from "./rate-limiter.js";
 import type { LLMConfig, LLMCallOptions, LLMCallResult, LLMCallLog } from "../types/index.js";
 import type { Message } from "./prompt-builder.js";
 import {
@@ -175,6 +176,21 @@ export class LLMClient {
     timeoutMs?: number,
     responseFormatType?: "json_object",
   ): Promise<{ text: string; usage: { prompt_tokens: number; completion_tokens: number } }> {
+    const estimatedTokens = this.estimateTokens(messages);
+    
+    return await globalRateLimiter.executeWithRetry(
+      async () => this.doSendRequest(messages, model, temperature, timeoutMs, responseFormatType),
+      { tokens: estimatedTokens, timeoutMs },
+    );
+  }
+
+  private async doSendRequest(
+    messages: Message[],
+    model: string,
+    temperature?: number,
+    timeoutMs?: number,
+    responseFormatType?: "json_object",
+  ): Promise<{ text: string; usage: { prompt_tokens: number; completion_tokens: number } }> {
     const url = `${this.config.baseURL}/chat/completions`;
 
     const controller = new AbortController();
@@ -203,10 +219,19 @@ export class LLMClient {
         signal: controller.signal,
       });
 
+      const headers: Record<string, string> = {};
+      res.headers.forEach((value, key) => {
+        headers[key.toLowerCase()] = value;
+      });
+
       if (!res.ok) {
+        globalRateLimiter.recordFailure();
         const errBody = await res.text().catch(() => "");
         throw new Error(`LLM API error ${res.status}: ${errBody}`);
       }
+
+      globalRateLimiter.recordSuccess();
+      globalRateLimiter.updateFromRateLimitHeaders(headers);
 
       const data = (await res.json()) as {
         choices: { message: { content: string } }[];
@@ -225,6 +250,11 @@ export class LLMClient {
     } finally {
       clearTimeout(timeout);
     }
+  }
+
+  private estimateTokens(messages: Message[]): number {
+    const totalChars = messages.reduce((sum, m) => sum + m.content.length, 0);
+    return Math.ceil(totalChars / 4);
   }
 
   private async sendStructuredRequest(
