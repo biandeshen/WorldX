@@ -283,4 +283,75 @@ export class MemoryManager {
 
     return matchCount / contextLower.length;
   }
+
+  compressOldMemories(characterId: string, options: { olderThanDays?: number; maxMemories?: number } = {}): number {
+    const olderThanDays = options.olderThanDays ?? 5;
+    const maxMemories = options.maxMemories ?? 20;
+    const currentDay = Math.floor(Date.now() / 86400000);
+
+    const oldMemories = memoryStore.getMemoriesByCharacter(characterId, {
+      isLongTerm: true,
+    }).filter((m) => m.gameDay < currentDay - olderThanDays);
+
+    if (oldMemories.length <= maxMemories) return 0;
+
+    const groupedByDay = new Map<number, MemoryEntry[]>();
+    for (const m of oldMemories) {
+      if (!groupedByDay.has(m.gameDay)) groupedByDay.set(m.gameDay, []);
+      groupedByDay.get(m.gameDay)!.push(m);
+    }
+
+    let compressedCount = 0;
+    for (const [day, dayMemories] of groupedByDay) {
+      if (dayMemories.length <= 3) continue;
+
+      const summary: MemoryEntry = {
+        id: generateId(),
+        characterId,
+        type: "experience",
+        content: `Day ${day} summary: ${dayMemories.map((m) => m.content).join("; ")}`,
+        gameDay: day,
+        gameTick: 0,
+        importance: 5,
+        emotionalValence: 0,
+        emotionalIntensity: 1,
+        relatedCharacters: [],
+        relatedLocation: "",
+        relatedObjects: [],
+        tags: ["compressed", `originals:${dayMemories.length}`],
+        decayFactor: 0.8,
+        accessCount: 0,
+        isLongTerm: true,
+        embedding: undefined,
+      };
+
+      for (const m of dayMemories) {
+        memoryStore.deleteMemory(m.id);
+      }
+      memoryStore.insertMemory(summary);
+      compressedCount += dayMemories.length;
+    }
+
+    this.cache.delete(characterId);
+    return compressedCount;
+  }
+
+  pruneInactiveMemories(characterId: string, maxMemories: number = 100): number {
+    const allMemories = memoryStore.getMemoriesByCharacter(characterId);
+    if (allMemories.length <= maxMemories) return 0;
+
+    const sorted = allMemories.sort((a, b) => {
+      const scoreA = a.importance * (1 + a.accessCount * 0.1);
+      const scoreB = b.importance * (1 + b.accessCount * 0.1);
+      return scoreB - scoreA;
+    });
+
+    const toDelete = sorted.slice(maxMemories);
+    for (const m of toDelete) {
+      memoryStore.deleteMemory(m.id);
+    }
+
+    this.cache.delete(characterId);
+    return toDelete.length;
+  }
 }

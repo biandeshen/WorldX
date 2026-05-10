@@ -21,6 +21,24 @@ const DEFAULT_STRUCTURED_OUTPUT_MODE = resolveStructuredOutputMode(
 );
 const structuredOutputCapabilityCache = new Map<string, StructuredOutputMode>();
 
+export type TaskComplexity = "simple" | "moderate" | "complex";
+
+const TASK_COMPLEXITY_MAP: Record<string, TaskComplexity> = {
+  reactive_decision: "moderate",
+  dialogue_response: "complex",
+  reflection: "complex",
+  planning: "complex",
+  memory_consolidation: "moderate",
+  perception: "simple",
+  action_execution: "simple",
+};
+
+const MODEL_TIER_MAP: Record<TaskComplexity, string> = {
+  simple: process.env.SIMULATION_MODEL_MINI ?? "",
+  moderate: process.env.SIMULATION_MODEL_MEDIUM ?? "",
+  complex: process.env.SIMULATION_MODEL_COMPLEX ?? "",
+};
+
 function getRequestTimeoutMs(overrideMs?: number): number {
   if (Number.isFinite(overrideMs) && (overrideMs ?? 0) > 0) {
     return overrideMs as number;
@@ -165,6 +183,11 @@ export class LLMClient {
     if (options.model) return options.model;
     if (this.config.modelOverrides?.[options.taskType]) {
       return this.config.modelOverrides[options.taskType];
+    }
+    const complexity = TASK_COMPLEXITY_MAP[options.taskType] ?? "moderate";
+    const tierModel = MODEL_TIER_MAP[complexity];
+    if (tierModel && tierModel !== this.config.defaultModel) {
+      return tierModel;
     }
     return this.config.defaultModel;
   }

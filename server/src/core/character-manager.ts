@@ -237,6 +237,11 @@ export class CharacterManager {
         .all(charId) as any[]
     ).map(rowToDiary);
   }
+
+  getRecentEvents(charId: string, limit: number): string[] {
+    const diaries = this.getDiaryEntries(charId);
+    return diaries.slice(-limit).map((d) => d.content);
+  }
 }
 
 function rowToDiary(row: any): DiaryEntry {
