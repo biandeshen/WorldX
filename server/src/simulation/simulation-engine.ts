@@ -89,28 +89,37 @@ export class SimulationEngine {
 
     const allChars = shuffle(this.characterManager.getAllProfiles());
 
-    for (const char of allChars) {
-      events.push(
-        ...this.characterManager.tickPassiveUpdate(char.id, gameTime),
-      );
-    }
+    await Promise.allSettled(
+      allChars.map((char) => {
+        const evs = this.characterManager.tickPassiveUpdate(char.id, gameTime);
+        evs.forEach((e) => events.push(e));
+        return Promise.resolve();
+      }),
+    );
 
     const activeSessions = this.reconcileDialogueSessions();
-    const decisionEligible: string[] = [];
-
-    for (const char of allChars) {
-      try {
-        const shouldDecide = this.prepareCharacterForTick(
-          char.id,
-          gameTime,
-          absNow,
-          events,
-        );
-        if (shouldDecide) {
-          decisionEligible.push(char.id);
+    const prepareResults = await Promise.allSettled(
+      allChars.map((char) => {
+        try {
+          const shouldDecide = this.prepareCharacterForTick(
+            char.id,
+            gameTime,
+            absNow,
+            events,
+          );
+          return { charId: char.id, shouldDecide };
+        } catch (err) {
+          console.error(`[SimEngine] Error preparing ${char.id}:`, err);
+          return { charId: char.id, shouldDecide: false };
         }
-      } catch (err) {
-        console.error(`[SimEngine] Error preparing ${char.id}:`, err);
+      }),
+    );
+    const decisionEligible: string[] = [];
+    for (const result of prepareResults) {
+      if (result.status === "fulfilled") {
+        if (result.value.shouldDecide) {
+          decisionEligible.push(result.value.charId);
+        }
       }
     }
 
