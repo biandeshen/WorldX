@@ -14,7 +14,7 @@ function run(name, cmd, args, cwd) {
   const proc = spawn(cmd, args, {
     cwd,
     stdio: ["ignore", "pipe", "pipe"],
-    shell: IS_WINDOWS,
+    shell: IS_WINDOWS ? "cmd.exe" : false,
     detached: !IS_WINDOWS,
   });
   proc.stdout.on("data", (d) =>
