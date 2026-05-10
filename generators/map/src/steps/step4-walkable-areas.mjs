@@ -43,6 +43,11 @@ export async function generateWalkableMap(compressedMapBuffer, userPrompt, world
     console.log(`[Step 4] Generated marked image: ${markedBuffer.length} bytes`);
     save(`04-walkable-attempt-${attempt}.png`, markedBuffer);
 
+    if (attempt === 1 && additionalInstructions === "") {
+      console.log("[Step 4] Skipping review on first attempt (trust model on fresh generation)");
+      return { buffer: markedBuffer, reviewPassed: true, attempts: 1 };
+    }
+
     console.log(`[Step 4] Reviewing (${attempt}/${totalAttempts})...`);
 
     const reviewPrompt = loadPrompt("step4-walkable-review.md", {

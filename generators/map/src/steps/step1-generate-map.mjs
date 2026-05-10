@@ -53,6 +53,11 @@ export async function generateMap(userPrompt, worldDesign, save, { originalUserP
     console.log(`[Step 1] Generated image: ${mapBuffer.length} bytes`);
     save(`01-map-attempt-${attempt}.png`, mapBuffer);
 
+    if (attempt === 1 && !additionalConstraints) {
+      console.log(`[Step 1] Skipping review on first attempt (trust model on fresh generation)`);
+      return { buffer: mapBuffer, reviewPassed: true, attempts: 1 };
+    }
+
     console.log(`[Step 1] Reviewing (${attempt}/${totalAttempts})...`);
     const { buffer: smallBuf } = await resizeImage(mapBuffer, 1024);
 

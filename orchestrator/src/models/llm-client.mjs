@@ -3,8 +3,7 @@
  * Reads ORCHESTRATOR_* env vars. Loads env from WorldX root.
  */
 
-import dotenv from "dotenv";
-import { join, dirname } from "path";
+import { dirname } from "path";
 import { fileURLToPath } from "url";
 import {
   STRUCTURED_OUTPUT_MODES,
@@ -15,7 +14,6 @@ import {
 } from "../../../shared/structured-output.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: join(__dirname, "../../../.env") });
 
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
 const DEFAULT_MODEL = "google/gemini-2.5-pro-preview";
