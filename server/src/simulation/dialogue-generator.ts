@@ -1,11 +1,9 @@
 import type { LLMClient } from "../llm/llm-client.js";
 import type { PromptBuilder } from "../llm/prompt-builder.js";
-import {
-  DialogueFinalizeSchema,
-  DialogueTurnSchema,
-} from "../llm/output-schemas.js";
+import { DialogueFinalizeSchema, DialogueTurnSchema } from "../llm/output-schemas.js";
 import type { CharacterManager } from "../core/character-manager.js";
 import type { WorldManager } from "../core/world-manager.js";
+import { compressTranscript } from "../llm/context-compression.js";
 import type {
   DialogueResult,
   DialogueSession,
@@ -29,6 +27,14 @@ export class DialogueGenerator {
     const { session, gameTime } = params;
     const context = this.buildDialogueContext(session, gameTime);
 
+    const compressedTranscript = compressTranscript(session.transcript);
+    const transcriptForPrompt = compressedTranscript.wasCompressed
+      ? [
+          ...(compressedTranscript.summary ? [{ speaker: "__summary__", content: compressedTranscript.summary }] : []),
+          ...compressedTranscript.entries,
+        ]
+      : session.transcript;
+
     try {
       const messages = this.promptBuilder.buildDialogueTurnMessages({
         participants: context.participants,
@@ -36,7 +42,7 @@ export class DialogueGenerator {
         initiatorId: session.initiatorId,
         initiatorMotivation: session.motivation,
         gameTime,
-        transcript: session.transcript,
+        transcript: transcriptForPrompt,
         nextSpeaker: session.nextSpeaker,
         totalTurns: session.totalTurns,
         hearsayA: context.hearsayA,

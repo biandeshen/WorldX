@@ -245,6 +245,12 @@ export async function locateElements(compressedBuffer, worldDesign, userPrompt, 
     const annotatedImage = await drawBoundingBoxes(compressedBuffer, boxes, ELEMENT_BOX_STYLE);
     save(`03.2-elements-attempt-${attempt}.png`, annotatedImage);
 
+    if (attempt === 1 && additionalConstraints === "") {
+      console.log("[Step 3.2] Skipping confirmation review on first attempt (trust overlay on fresh generation)");
+      reviewPassed = true;
+      break;
+    }
+
     // ── Phase C: Gemini Pro confirmation pass ──
     const elementsList = locatedElements
       .map((e) => {

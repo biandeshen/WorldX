@@ -142,43 +142,52 @@ async function generateMapAssets({ mapDir, worldDir, logsDir, mapScript, mapDesc
 }
 
 async function generateCharacterAssets({ charsDir, charScript, characters, worldDesign, originalPrompt }) {
-  console.log("\n━━━ Phase 3: Generating Characters ━━━");
+  console.log("\n━━━ Phase 3: Generating Characters (parallel) ━━━");
   const worldVisualContext = buildWorldVisualContext(worldDesign);
 
   const ipSource = extractIpSource(worldDesign, originalPrompt);
 
-  for (let i = 0; i < characters.length; i++) {
-    const char = characters[i];
-    console.log(`\nGenerating character ${i + 1}/${characters.length}: ${char.name}`);
+  const charPromises = characters.map((char, i) => {
+    console.log(`[Parallel] Queuing character ${i + 1}/${characters.length}: ${char.name}`);
+    return (async () => {
+      try {
+        const charIpSource = char.canonicalRefs?.source || ipSource;
+        await runNodeScript(
+          charScript,
+          [
+            char.appearance,
+            "--name",
+            char.name,
+            "--role",
+            typeof char.role === "string" ? char.role : "",
+            "--world-visual-context",
+            worldVisualContext,
+            ...(charIpSource ? ["--ip-source", charIpSource] : []),
+          ],
+          {
+            env: {
+              CHAR_OUTPUT_DIR: charsDir,
+            },
+            timeoutMs: CHARACTER_GENERATION_TIMEOUT_MS,
+            label: `Character "${char.name}" generation`,
+          },
+        );
+        return { success: true, name: char.name };
+      } catch (err) {
+        console.error(`Character "${char.name}" generation failed: ${err.message}`);
+        return { success: false, name: char.name, error: err.message };
+      }
+    })();
+  });
 
-    const charIpSource = char.canonicalRefs?.source || ipSource;
+  const results = await Promise.all(charPromises);
 
-    try {
-      await runNodeScript(
-        charScript,
-        [
-          char.appearance,
-          "--name",
-          char.name,
-          "--role",
-          typeof char.role === "string" ? char.role : "",
-          "--world-visual-context",
-          worldVisualContext,
-          ...(charIpSource ? ["--ip-source", charIpSource] : []),
-        ],
-        {
-        env: {
-          CHAR_OUTPUT_DIR: charsDir,
-        },
-        timeoutMs: CHARACTER_GENERATION_TIMEOUT_MS,
-        label: `Character "${char.name}" generation`,
-        },
-      );
-    } catch (err) {
-      console.error(`Character "${char.name}" generation failed: ${err.message}`);
-      console.error("Continuing with remaining characters...");
-    }
+  const failed = results.filter(r => !r.success);
+  if (failed.length > 0) {
+    console.warn(`\n[Character Gen] ${failed.length} character(s) failed: ${failed.map(f => f.name).join(", ")}`);
   }
+
+  console.log(`\n[Character Gen] Completed: ${results.filter(r => r.success).length}/${characters.length} succeeded`);
 }
 
 function purgeFailedCharacters(charsDir, worldDesign) {

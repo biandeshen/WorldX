@@ -254,6 +254,12 @@ export async function resolveDesignedRegions(compressedBuffer, worldDesign, user
     const annotatedImage = await drawBoundingBoxes(compressedBuffer, boxes, REGION_BOX_STYLE);
     save(`03-regions-attempt-${attempt}.png`, annotatedImage);
 
+    if (attempt === 1 && additionalConstraints === "") {
+      console.log("[Step 3] Skipping confirmation review on first attempt (trust overlay on fresh generation)");
+      reviewPassed = true;
+      break;
+    }
+
     // ── Phase C: Gemini Pro confirmation pass ──
     const regionsList = locatedRegions
       .map((r) =>
